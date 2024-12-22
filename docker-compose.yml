@@ -49,8 +49,8 @@ x-airflow-common:
   # In order to add custom dependencies or upgrade provider packages you can use your extended image.
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
-  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.10.4}
-  # build: .
+  # image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.10.4}
+  build: ./airflow
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -73,9 +73,9 @@ x-airflow-common:
     # If you want to use it, outcomment it and replace airflow.cfg with the name of your config file
     # AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
   volumes:
+    - ${AIRFLOW_PROJ_DIR:-.}/data:/opt/airflow/data
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
-    - ${AIRFLOW_PROJ_DIR:-.}/data:/opt/airflow/data
     # - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     # - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
   user: "${AIRFLOW_UID:-50000}:0"
@@ -87,6 +87,64 @@ x-airflow-common:
       condition: service_healthy
 
 services:
+  # --- MLflow ---
+  minio:
+    image: minio/minio@sha256:d051d800a3025588f37f69f132bb5ef718547a9a4ee95ddee44e04ad952a0a96
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ':9001' --address ':9000'
+    restart: always
+
+  minio-client:
+    image: minio/mc@sha256:4ccb0c7437bda19ed232603eab10cc246c8f9ac7ccd282943ebb7657a2df4820
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    entrypoint: >
+        /bin/sh -c "
+        /tmp/wait-for-it.sh minio:9000 &&
+        /usr/bin/mc alias set minio http://minio:9000 $${AWS_ACCESS_KEY_ID} $${AWS_SECRET_ACCESS_KEY} &&
+        /usr/bin/mc mb minio/mlflow;
+        exit 0;
+        "
+    volumes:
+        - ./mlflow/wait-for-it.sh:/tmp/wait-for-it.sh
+    depends_on:
+        - minio
+
+  mysql:
+    image: mysql/mysql-server@sha256:5b40d96b11333570143d98d3a74100fefadb9abb17b27a95dbc9ad33544ec142
+    environment:
+      MYSQL_ROOT_PASSWORD: mlflow
+      MYSQL_DATABASE: mlflow
+      MYSQL_USER: mlflow
+      MYSQL_PASSWORD: mlflow
+    volumes:
+      - mysql-db-volume:/var/lib/mysql
+    restart: always
+
+  mlflow:
+    build: ./mlflow
+    image: mlflow_server
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    ports:
+      - "5000:5000"
+    command: mlflow server --backend-store-uri mysql+pymysql://mlflow:mlflow@mysql:3306/mlflow --default-artifact-root s3://mlflow/ --host 0.0.0.0
+    restart: always
+    depends_on:
+      - mysql
+      - minio-client
+
+  # --- Airflow ---
   postgres:
     image: postgres:13
     environment:
@@ -287,3 +345,5 @@ services:
 
 volumes:
   postgres-db-volume:
+  mysql-db-volume:
+  minio-data:

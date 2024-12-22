@@ -3,6 +3,7 @@ from datetime import datetime
 import pandas as pd
 from airflow.operators.python_operator import PythonOperator
 
+import mlflow
 from airflow import DAG
 
 

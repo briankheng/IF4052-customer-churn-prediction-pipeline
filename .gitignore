@@ -130,3 +130,5 @@ dmypy.json
 
 # Log files
 logs/
+airflow/data/output_data/*
+!airflow/data/output_data/.gitkeep

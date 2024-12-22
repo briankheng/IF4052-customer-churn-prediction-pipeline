@@ -3,10 +3,11 @@ from datetime import datetime
 import pandas as pd
 from airflow.operators.python_operator import PythonOperator
 from airflow.utils.dates import days_ago
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 
+import mlflow
 from airflow import DAG
 
 INPUT_DATA_DIR = "/opt/airflow/data/input_data"
@@ -56,36 +57,32 @@ def train_model():
     X_train = pd.read_csv(f"{OUTPUT_DATA_DIR}/X_train.csv")
     y_train = pd.read_csv(f"{OUTPUT_DATA_DIR}/y_train.csv")
 
-    # mlflow.sklearn.autolog()
-    # mlflow.set_tracking_uri("http://mlflow:5000")
-    # mlflow.set_experiment("customer_churn_prediction")
-    # mlflow.start_run()
+    mlflow.sklearn.autolog()
 
-    svm_model = SVC(kernel="linear", random_state=42)
-    svm_model.fit(X_train, y_train)
+    with mlflow.start_run() as run:
+        svm_model = SVC(kernel="linear", random_state=42)
+        svm_model.fit(X_train, y_train)
 
-    # mlflow.sklearn.log_model(svm_model, "model")
+        run_id = run.info.run_id
 
+    return run_id
+
+
+def evaluate_model(mlflow_run_id):
     X_test = pd.read_csv(f"{OUTPUT_DATA_DIR}/X_test.csv")
     y_test = pd.read_csv(f"{OUTPUT_DATA_DIR}/y_test.csv")
 
-    y_pred = svm_model.predict(X_test)
+    model_uri = f"runs:/{mlflow_run_id}/model"
+
+    model = mlflow.pyfunc.load_model(model_uri)
+    y_pred = model.predict(X_test)
+
     accuracy = accuracy_score(y_test, y_pred)
 
-    return f"Model accuracy: {accuracy}"
-    # return "Training completed."
+    with mlflow.start_run(run_id=mlflow_run_id):
+        mlflow.log_metric("test_accuracy", float(accuracy))
 
-
-# def evaluate_model():
-#     X_test = pd.read_csv(f"{OUTPUT_DATA_DIR}/X_test.csv")
-#     y_test = pd.read_csv(f"{OUTPUT_DATA_DIR}/y_test.csv")
-
-#     model = mlflow.sklearn.load_model("model")
-#     y_pred = model.predict(X_test)
-#     accuracy = accuracy_score(y_test, y_pred)
-
-#     mlflow.log_metric("accuracy", accuracy)
-#     return "Model evaluation completed."
+    return "Model accuracy: " + str(accuracy)
 
 
 default_args = {"owner": "airflow"}
@@ -94,8 +91,8 @@ dag = DAG(
     dag_id="customer_churn_prediction_model_retrain",
     description="Retrain the customer churn prediction model",
     default_args=default_args,
-    # start_date=days_ago(1),
 )
+
 
 read_data = PythonOperator(task_id="read_data", python_callable=read_data, dag=dag)
 
@@ -111,8 +108,11 @@ train_model = PythonOperator(
     task_id="train_model", python_callable=train_model, dag=dag
 )
 
-# evaluate_model = PythonOperator(
-#     task_id="evaluate_model", python_callable=evaluate_model, dag=dag
-# )
+evaluate_model = PythonOperator(
+    task_id="evaluate_model",
+    python_callable=evaluate_model,
+    op_args=["{{ ti.xcom_pull(task_ids='train_model') }}"],
+    dag=dag,
+)
 
-read_data >> preprocess_data >> split_train_test >> train_model
+read_data >> preprocess_data >> split_train_test >> train_model >> evaluate_model

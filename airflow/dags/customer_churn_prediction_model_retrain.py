@@ -1,9 +1,6 @@
-from datetime import datetime
-
 import pandas as pd
 from airflow.operators.python_operator import PythonOperator
-from airflow.utils.dates import days_ago
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 
@@ -68,7 +65,7 @@ def train_model():
     return run_id
 
 
-def evaluate_model(mlflow_run_id):
+def register_model(mlflow_run_id):
     X_test = pd.read_csv(f"{OUTPUT_DATA_DIR}/X_test.csv")
     y_test = pd.read_csv(f"{OUTPUT_DATA_DIR}/y_test.csv")
 
@@ -82,7 +79,9 @@ def evaluate_model(mlflow_run_id):
     with mlflow.start_run(run_id=mlflow_run_id):
         mlflow.log_metric("test_accuracy", float(accuracy))
 
-    return "Model accuracy: " + str(accuracy)
+    mlflow.register_model(model_uri, "customer_churn_prediction_model")
+
+    return "Model registered."
 
 
 default_args = {"owner": "airflow"}
@@ -108,11 +107,11 @@ train_model = PythonOperator(
     task_id="train_model", python_callable=train_model, dag=dag
 )
 
-evaluate_model = PythonOperator(
-    task_id="evaluate_model",
-    python_callable=evaluate_model,
+register_model = PythonOperator(
+    task_id="register_model",
+    python_callable=register_model,
     op_args=["{{ ti.xcom_pull(task_ids='train_model') }}"],
     dag=dag,
 )
 
-read_data >> preprocess_data >> split_train_test >> train_model >> evaluate_model
+read_data >> preprocess_data >> split_train_test >> train_model >> register_model

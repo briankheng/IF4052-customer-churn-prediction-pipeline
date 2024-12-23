@@ -1,4 +1,5 @@
 import pandas as pd
+from airflow.operators.bash import BashOperator
 from airflow.operators.python_operator import PythonOperator
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
@@ -114,4 +115,17 @@ register_model = PythonOperator(
     dag=dag,
 )
 
-read_data >> preprocess_data >> split_train_test >> train_model >> register_model
+restart_prediction_service = BashOperator(
+    task_id="restart_prediction_service",
+    bash_command="docker restart prediction_service",
+    dag=dag,
+)
+
+(
+    read_data
+    >> preprocess_data
+    >> split_train_test
+    >> train_model
+    >> register_model
+    >> restart_prediction_service
+)

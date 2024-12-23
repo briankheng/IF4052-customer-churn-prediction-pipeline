@@ -43,5 +43,5 @@ RUN pip install -r requirements.txt
 
 EXPOSE 8000
 
-# Run bash
+# Run the command to start MLflow Model Server
 CMD ["mlflow", "models", "serve", "-m", "models:/customer_churn_prediction_model/latest", "-p", "8000", "--no-conda", "--host", "0.0.0.0"]

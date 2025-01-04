@@ -64,7 +64,7 @@ def train_model():
     mlflow.sklearn.autolog()
 
     with mlflow.start_run() as run:
-        svm_model = SVC(kernel="linear", random_state=42)
+        svm_model = SVC(kernel="linear", probability=True, random_state=42, max_iter=10)
         svm_model.fit(X_train, y_train)
 
         run_id = run.info.run_id

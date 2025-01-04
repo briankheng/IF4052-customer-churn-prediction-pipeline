@@ -102,9 +102,9 @@ dag = DAG(
 
 read_data = PythonOperator(task_id="read_data", python_callable=read_data, dag=dag)
 
-preprocess_data = PythonOperator(
-    task_id="preprocess_data", python_callable=preprocess_data, dag=dag
-)
+# preprocess_data = PythonOperator(
+#     task_id="preprocess_data", python_callable=preprocess_data, dag=dag
+# )
 
 preprocess_data_spark = SparkSubmitOperator(
     application=f"{SPARK_JOBS_DIR}/preprocess_data.py",

@@ -80,6 +80,7 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/data:/opt/airflow/data
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
+    - ${SPARK_PROJ_DIR:-.}/jobs:/opt/spark/jobs
     - /var/run/docker.sock:/var/run/docker.sock
     # - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     # - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
@@ -362,6 +363,42 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+  
+  spark:
+    build: ./spark
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_USER=spark
+      - SPARK_WEBUI_SSL_PORT=8081
+    volumes:
+      - ${AIRFLOW_PROJ_DIR:-.}/data:/opt/airflow/data
+      - ${SPARK_PROJ_DIR:-.}/jobs:/opt/spark/jobs
+    ports:
+      - '7077:7077'
+      - '8081:8081'
+      - '4041:4041'
+
+  spark-worker:
+    build: ./spark
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+      - SPARK_WORKER_MEMORY=1G      #<--- adjust accordingly
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_USER=spark
+    volumes:
+      - ${AIRFLOW_PROJ_DIR:-.}/data:/opt/airflow/data
+      - ${SPARK_PROJ_DIR:-.}/jobs:/opt/spark/jobs
+    depends_on:
+      - spark
 
 volumes:
   postgres-db-volume:

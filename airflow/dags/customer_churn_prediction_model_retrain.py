@@ -1,15 +1,21 @@
+from email.mime import application
 import pandas as pd
 from airflow.operators.bash import BashOperator
 from airflow.operators.python_operator import PythonOperator
+from airflow.operators.docker_operator import DockerOperator
+from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
+from docker.types import Mount
 
 import mlflow
 from airflow import DAG
 
 INPUT_DATA_DIR = "/opt/airflow/data/input_data"
 OUTPUT_DATA_DIR = "/opt/airflow/data/output_data"
+
+SPARK_JOBS_DIR = "/opt/spark/jobs"
 
 
 def read_data():
@@ -100,6 +106,15 @@ preprocess_data = PythonOperator(
     task_id="preprocess_data", python_callable=preprocess_data, dag=dag
 )
 
+preprocess_data_spark = SparkSubmitOperator(
+    application=f"{SPARK_JOBS_DIR}/preprocess_data.py",
+    task_id="preprocess_data_spark",
+    name="preprocess_data_spark",
+    conn_id="spark_local",
+    verbose=True,
+    dag=dag,
+)
+
 split_train_test = PythonOperator(
     task_id="split_train_test", python_callable=split_train_test, dag=dag
 )
@@ -123,7 +138,7 @@ restart_prediction_service = BashOperator(
 
 (
     read_data
-    >> preprocess_data
+    >> preprocess_data_spark
     >> split_train_test
     >> train_model
     >> register_model

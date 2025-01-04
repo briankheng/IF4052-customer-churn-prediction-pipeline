@@ -24,3 +24,11 @@ Once the services are up, you can access the Airflow web interface at:
 - Username: `airflow`
 - Password: `airflow`
 
+### Workflows
+
+#### customer_churn_prediction_model_retrain
+Before running, make sure:
+- there is bucket named 'mlflow' in MinIO [http://localhost:9001/buckets](http://localhost:9001/buckets)
+- there is connection 'spark_local' pointing to spark://spark:7077 in airflow
+
+

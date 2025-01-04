@@ -81,7 +81,10 @@ def count_psi(X_test, X_test_drift, num_bins=10):
 
     psi_df['psi'] = (psi_df['percent_init'] - psi_df['percent_drift']) * np.log(psi_df['percent_init'] / psi_df['percent_drift'])
 
-    return psi_df['psi'].mean()
+    print(psi_df)
+    print(psi_df.sum())
+
+    return psi_df['psi'].sum()
 
 def check_drift():
     X_test = pd.read_csv(f"{OUTPUT_DATA_DIR}/X_test.csv")
